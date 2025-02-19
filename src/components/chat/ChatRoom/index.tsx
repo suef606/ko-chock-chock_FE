@@ -9,18 +9,20 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Input from "@/commons/input";
 import { useUserStore } from "@/commons/store/userStore";
 import axiosInstance from "@/utils/axiosInstance";
-
+// 수정된 Message 인터페이스
 interface Message {
-  createdAt: string;
-  writeUserName(arg0: string, writeUserName: any): unknown;
-  message(arg0: string, message: any): unknown;
-  chatRoomId: any;
-  type: string; // 메시지 타입 ('text' 또는 'system')
-  text?: string; // 일반 메시지 내용
-  time: string; // 시간
-  sender: string; // 발신자
-  senderId: number; // 발신자ID
-  content?: { title: string; subtitle: string }; // 시스템 메시지의 추가 내용
+  createdAt?: string; // 옵셔널로 변경
+  writeUserName?: string;
+  writeUserProfileImage?: string;
+  writeUserId?: string | number;
+  message?: string;
+  chatRoomId?: number;
+  type: string; // 유일한 필수 필드
+  text?: string;
+  time?: string;
+  sender?: string;
+  senderId?: number;
+  content?: { title: string; subtitle: string };
 }
 
 export default function ChatRoom() {
@@ -39,32 +41,28 @@ export default function ChatRoom() {
   const tradeUserId = searchParams.get("tradeUserId") || ""; // 🔥 게시물 ID 추가
   const user = useUserStore((state) => state.user); // 로그인한 유저정보 가져옴
   const stompClientRef = useRef<Client | null>(null);
-  const [messageType, setMessageType] = useState("TEXT"); // 메시지 타입 (TEXT, IMAGE 등)
-
+  // const [messageType, _setMessageType] = useState("TEXT"); // 언더스코어 추가로 경고 억제
+// 대신 상수 추가
+const MESSAGE_TYPE = "TEXT";
   useEffect(() => {
     console.log("📡 WebSocket 연결 시도 중...");
     console.log("🔍 구독하는 roomId 타입:", typeof roomId, roomId);
-
+  
     const socket = new SockJS("http://3.36.40.240:8001/ws");
     const stompClient = new Client({
       webSocketFactory: () => socket,
-      reconnectDelay: 5000, // 5초마다 자동 재연결
+      reconnectDelay: 5000,
       onConnect: () => {
         console.log("✅ WebSocket 연결 성공!");
-
-        // 2️⃣ 서버와 메시지 주고받을 경로 설정
+  
         const subscribePath = `/topic/chat/${Number(roomId)}`;
-
-        // 3️⃣ (메시지 수신 설정)
+  
         stompClient.subscribe(subscribePath, (message) => {
           try {
-            console.log("📩 메시지 수신됨:", message.body); // 메시지가 도착하는지 확인
+            console.log("📩 메시지 수신됨:", message.body);
             const receivedMessage = JSON.parse(message.body);
             console.log("✅ 파싱된 메시지:", receivedMessage);
-
-            // 상태 업데이트 전 콘솔 출력
-            console.log("🛠 기존 messages 상태:", messages);
-
+  
             setMessages((prevMessages) => {
               console.log("📌 업데이트될 messages 상태:", [
                 ...prevMessages,
@@ -81,17 +79,17 @@ export default function ChatRoom() {
         console.error("🚨 STOMP 오류 발생:", frame);
       },
     });
-
+  
     stompClient.activate();
     stompClientRef.current = stompClient;
-
+  
     return () => {
       if (stompClientRef.current) {
         console.log("🛑 WebSocket 연결 해제");
         stompClientRef.current.deactivate();
       }
     };
-  }, [roomId]);
+  }, [roomId]); // messages 참조 제거
 
   // API를 요청해서 해당방의 이전 메세지 기록을 불러옴
   useEffect(() => {
@@ -103,7 +101,7 @@ export default function ChatRoom() {
       .catch((error) =>
         console.error("채팅 내역 불러오기 실패:", error.message)
       );
-  }, [roomId]);
+  }, [roomId, postId]); // postId 의존성 추가
 
   // ✅ 채팅방 하단 자동 스크롤
   useEffect(() => {
@@ -119,18 +117,16 @@ export default function ChatRoom() {
     if (!inputValue.trim()) return; // 빈 메세지 방지
 
     const chatMessage: Message = {
-      chatRoomId: Number(roomId), // ✅ 문자열이 아니라 숫자로 변환
-
-      type: messageType, // 메세지 타입
-      message: inputValue, // 메세지 내용
+      chatRoomId: Number(roomId),
+      type: MESSAGE_TYPE, // messageType을 MESSAGE_TYPE으로 변경
+      message: inputValue,
       createdAt: new Date().toLocaleTimeString([], {
-        // 보낸 시간
         hour: "2-digit",
         minute: "2-digit",
       }),
-      writeUserName: user.name, // 현재 로그인 사용자 이름
+      writeUserName: user?.name,
       writeUserProfileImage: "",
-      writeUserId: user.id, // ✅ 로그인한 유저 ID
+      writeUserId: user?.id,
     };
     console.log("📤 메시지 전송:", chatMessage);
 
@@ -168,6 +164,7 @@ export default function ChatRoom() {
       }),
       sender: "System",
       senderId: 0,
+      createdAt: new Date().toISOString(), // createdAt 속성 추가
     };
 
     // socket.emit("message", newMessage); // 서버로 메시지 전송
@@ -211,13 +208,13 @@ export default function ChatRoom() {
           console.log("🖥 렌더링되는 message:", message); // ✅ 확인용 로그 추가
           console.log("🔍 message.sender:", message.sender);
           console.log("🔍 message.writeUserName:", message.writeUserName);
-          console.log("🔍 user.name:", user.name);
+          console.log("🔍 user.name:", user?.name);
 
           return (
             <div
               key={index}
               className={`w-full flex ${
-                (message.sender || message.writeUserName) === user.name
+                (message.sender || message.writeUserName) === user?.name
                   ? "justify-end"
                   : "justify-start"
               }`}
@@ -242,14 +239,14 @@ export default function ChatRoom() {
               ) : (
                 <>
                   {/* 내가 보낸 메시지라면 시간은 왼쪽에 표시 */}
-                  {(message.sender || message.writeUserName) === user.name && (
+                  {(message.sender || message.writeUserName) === user?.name && (
                     <span className="flex items-end min-w-[3.8125rem] mr-[5px] text-[#8D8974] text-center text-sm font-medium leading-5 tracking-[-0.01875rem]">
                       {message.createdAt || "시간 없음"}
                     </span>
                   )}
 
                   {/* 상대 아이콘 */}
-                  {(message.sender || message.writeUserName) !== user.name && (
+                  {(message.sender || message.writeUserName) !== user?.name && (
                     <div
                       className="w-[40px] h-[40px] mr-2 rounded-3xl bg-center bg-cover bg-no-repeat flex-shrink-0"
                       style={{
@@ -260,7 +257,7 @@ export default function ChatRoom() {
 
                   <div
                     className={`max-w-[79%] px-3 py-2 ${
-                      (message.sender || message.writeUserName) === user.name
+                      (message.sender || message.writeUserName) === user?.name
                         ? "bg-[#E9E8E3] rounded-tl-lg rounded-tr-lg rounded-bl-lg rounded-br-none"
                         : "bg-[#BFE5B3] rounded-tl-none rounded-tr-lg rounded-bl-lg rounded-br-lg "
                     } text-[#26220D] text-base font-medium leading-6 tracking-[-0.025rem]`}
@@ -269,7 +266,7 @@ export default function ChatRoom() {
                   </div>
 
                   {/* 상대가 보낸 메세지라면 시간은 오른쪽에 표시 */}
-                  {(message.sender || message.writeUserName) !== user.name && (
+                  {(message.sender || message.writeUserName) !== user?.name && (
                     <span className="flex items-end min-w-[3.8125rem] ml-[5px] text-[#8D8974] text-center text-sm font-medium leading-5 tracking-[-0.01875rem]">
                       {message.createdAt}
                     </span>
@@ -299,7 +296,7 @@ export default function ChatRoom() {
             />
 
             {/* 산책 시작하기 */}
-            {Number(tradeUserId) === user.id && (
+            {Number(tradeUserId) === user?.id && (
               <Image
                 onClick={onClickApprove}
                 className=""
