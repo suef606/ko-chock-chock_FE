@@ -4,5 +4,16 @@
       "source": "/ws",
       "destination": "http://3.36.40.240:8001/ws"
     }
+  ],
+  "headers": [
+    {
+      "source": "/ws",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    }
   ]
 }

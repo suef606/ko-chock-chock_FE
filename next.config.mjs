@@ -21,6 +21,10 @@ const nextConfig = {
         source: "/api/:path*",
         destination: "http://3.36.40.240:8001/api/:path*",
       },
+      {
+        source: "/ws",
+        destination: "http://3.36.40.240:8001/ws",
+      },
     ];
   },
   webpack: (config) => {
