@@ -47,7 +47,7 @@ export default function ChatList() {
         if (!token) throw new Error("액세스 토큰이 유효하지 않습니다.");
 
         // 🔥 채팅방 목록 불러오기
-        const response = await fetch(`/api/trade/my-chat-rooms`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/trade/my-chat-rooms`, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -70,8 +70,7 @@ export default function ChatList() {
             let tradeUserName = ""; // ✅ 게시물 주인 이름 추가
 
             try {
-              const tradeResponse = await fetch(
-                `/api/trade/${room.tradePostId}`,
+              const tradeResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/trade/${room.tradePostId}`, 
                 {
                   method: "GET",
                   headers: {

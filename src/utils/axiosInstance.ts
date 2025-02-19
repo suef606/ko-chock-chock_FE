@@ -22,7 +22,7 @@ interface ApiResponse<T = unknown> {
 
 // ✅ Axios 인스턴스 생성
 const axiosInstance = axios.create({
-  baseURL: "http://3.36.40.240:8001", // 백엔드 API 주소
+  baseURL: process.env.NEXT_PUBLIC_SERVER_URL, // 백엔드 API 주소
   timeout: 5000, // 요청 제한 시간 (5초)
   headers: {
     Authorization: token ? `Bearer ${token}` : undefined,

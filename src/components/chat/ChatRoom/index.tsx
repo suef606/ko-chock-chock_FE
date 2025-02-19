@@ -48,7 +48,7 @@ const MESSAGE_TYPE = "TEXT";
     console.log("📡 WebSocket 연결 시도 중...");
     console.log("🔍 구독하는 roomId 타입:", typeof roomId, roomId);
   
-    const socket = new SockJS("http://3.36.40.240:8001/ws");
+    const socket = new SockJS(process.env.NEXT_PUBLIC_WEBSOCKET_URL || "http://3.36.40.240:8001/ws");
     const stompClient = new Client({
       webSocketFactory: () => socket,
       reconnectDelay: 5000,
