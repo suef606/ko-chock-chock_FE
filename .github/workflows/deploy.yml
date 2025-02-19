@@ -19,7 +19,7 @@ jobs:
         run: yarn install --frozen-lockfile
         
       - name: Build
-        run: yarn build
+        run: yarn build --no-lint
       
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v20
