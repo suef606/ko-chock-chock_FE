@@ -10,7 +10,7 @@ import Image from "next/image";
 
 import { useParams, useRouter } from "next/navigation";
 import RegionDropdown from "@/commons/regionsDropdown";
-import { useUserStore } from "@/store/userStore";
+// import { useUserStore } from "@/commons/store/userStore";
 
 const jobFormSchema = z.object({
   title: z.string().min(1, "제목을 입력해주세요"),
