@@ -1,36 +1,31 @@
-import axios from "axios";
+import axios, { AxiosResponse } from "axios";
 
 // 엑세스 토큰 가져옴
 const getAccessToken = (): string | null => {
+  if (typeof window === 'undefined') return null; // 서버 사이드에서 실행 시 예외 처리
+  
   const tokenStorageStr = localStorage.getItem("token-storage");
   if (!tokenStorageStr) return null;
   const tokenData = JSON.parse(tokenStorageStr);
   return tokenData?.accessToken || null;
 };
 
-// ✅ 현재 로그인한 사용자 ID 가져오기 (추가)
-const getUserId = (): number | null => {
-  const userStorageStr = localStorage.getItem("user-storage");
-  if (!userStorageStr) return null; // ❌ 데이터가 없을 경우 null 반환
+// 브라우저 환경에서만 실행되도록 조건 추가
+const token = typeof window !== 'undefined' ? getAccessToken() : null;
 
-  try {
-    const userStorageData = JSON.parse(userStorageStr);
-    return userStorageData?.state?.user?.id || null; // ✅ user ID 가져오기
-  } catch (error) {
-    console.error("❌ 유저 ID 파싱 실패:", error);
-    return null;
-  }
-};
-
-const token = getAccessToken();
-const loggedInUserId = getUserId(); // ✅ 로그인한 사용자 ID 가져오기
+// 응답 타입 정의
+interface ApiResponse<T = unknown> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
 
 // ✅ Axios 인스턴스 생성
 const axiosInstance = axios.create({
   baseURL: "http://3.36.40.240:8001", // 백엔드 API 주소
   timeout: 5000, // 요청 제한 시간 (5초)
   headers: {
-    Authorization: `Bearer ${token}`,
+    Authorization: token ? `Bearer ${token}` : undefined,
     "Content-Type": "application/json",
   },
 });
@@ -38,25 +33,36 @@ const axiosInstance = axios.create({
 // ✅ 요청 인터셉터 (Authorization 토큰 자동 추가)
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("accessToken"); // ✅ localStorage에서 토큰 가져오기
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      console.warn("🚨 인증 토큰 없음! 요청이 거부될 수 있음");
+    if (typeof window !== 'undefined') {
+      const tokenStorageStr = localStorage.getItem("token-storage");
+      if (tokenStorageStr) {
+        const tokenData = JSON.parse(tokenStorageStr);
+        const token = tokenData?.accessToken;
+        
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        } else {
+          console.warn("🚨 인증 토큰 없음! 요청이 거부될 수 있음");
+        }
+      }
     }
-
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// ✅ 응답 인터셉터 (에러 처리)
+// ✅ 응답 인터셉터 (에러 처리) - 타입 수정
 axiosInstance.interceptors.response.use(
-  (response) => ({
-    success: true,
-    data: response.data,
-  }),
+  <T>(response: AxiosResponse<T>): AxiosResponse<ApiResponse<T>> => {
+    // 원래 AxiosResponse 객체의 구조를 유지하면서 data만 수정
+    return {
+      ...response,
+      data: {
+        success: true,
+        data: response.data
+      }
+    };
+  },
   (error) => {
     console.error("API Error:", error);
 
