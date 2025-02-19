@@ -19,11 +19,21 @@ interface ChatRoom {
   tradePostImage?: string;
 }
 
+// 먼저 Room 타입을 정의합니다
+interface ChatRoomResponse {
+  id: string;
+  lastMessage?: string;
+  lastMessageDateTime?: string;
+  requestUserName: string;
+  requestUserProfileImage?: string;
+  tradePostId: number;
+}
+
 export default function ChatList() {
   const user = useUserStore((state) => state.user);
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const router = useRouter();
-  const userId = user.id;
+  const userId = user?.id;
 
   useEffect(() => {
     const fetchChatRooms = async () => {
@@ -52,7 +62,7 @@ export default function ChatList() {
 
         // 🔥 각 채팅방의 게시물 정보 가져오기
         const chatRoomsWithTradeInfo = await Promise.all(
-          data.map(async (room: any) => {
+          data.map(async (room: ChatRoomResponse) => {
             let tradePostTitle = "제목 없음";
             let tradePostPrice = "가격 미정";
             let tradePostImage = "/default-image.jpg";
@@ -168,7 +178,7 @@ export default function ChatList() {
                 <div className="flex flex-row items-center gap-1">
                   {/* 상대방 이름 적용 */}
                   <span className="overflow-hidden text-ellipsis text-[#26220D] font-suit text-[1rem] font-semibold leading-[1.5rem] tracking-[-0.025rem]">
-                    {room.tradeUserName === user.name
+                    {room.tradeUserName === user?.name
                       ? room.opponentName
                       : room.tradeUserName}
                   </span>
