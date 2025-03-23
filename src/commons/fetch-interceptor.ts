@@ -19,6 +19,12 @@
 * - 보안 및 사용자 경험 최적화
 */
 
+// ✅ 수정된 부분:
+// 1. 프록시 URL 함수 추가 - CORS 이슈 해결을 위해 CORS 프록시 사용
+// 2. 배포 환경 감지 로직 추가 - Vercel과 로컬 환경 구분
+// 3. HTTP 요청 시 CORS 프록시 적용 - HTTPS에서 HTTP 리소스 접근 차단 문제 해결
+// 4. 에러 처리 로직 강화 - 네트워크 오류에 대한 더 친절한 메시지 표시
+
 import { TokenStorage, refreshAccessToken } from '../components/auth/utils/tokenUtils';
 import { useUserStore } from '@/commons/store/userStore';
 import toast from 'react-hot-toast';
@@ -37,6 +43,24 @@ const AUTH_EXEMPT_PATHS = [
   '/api/users/check-email',  // 이메일 중복 체크 API
   '/api/users/check-name'    // 닉네임 중복 체크 API
 ];
+
+// 🌟 배포 환경인지 확인하는 함수 추가
+const isProductionEnvironment = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return window.location.hostname === 'ko-chock-chock.vercel.app' || 
+         window.location.protocol === 'https:';
+};
+
+// 🌟 CORS 이슈 해결을 위한 프록시 URL 생성 함수
+const getProxiedUrl = (url: string): string => {
+  // 이미 전체 URL인 경우 (http:// 또는 https://로 시작하고 배포 환경인 경우)
+  if (url.startsWith('http') && isProductionEnvironment()) {
+    // CORS 우회를 위한 프록시 서비스 사용
+    return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+  }
+  // 상대 경로이거나 로컬 환경이면 그대로 반환
+  return url;
+};
 
 /**
 * Fetch 인터셉터 설정 함수
@@ -73,8 +97,12 @@ const setupInterceptor = () => {
      // 2. 인증이 필요 없는 내부 API (AUTH_EXEMPT_PATHS에 포함된 경로)
      if (!url.startsWith('/api') || AUTH_EXEMPT_PATHS.some(path => url.includes(path))) {
        console.log('[FetchInterceptor] 인증 제외 경로:', url);
+       
+       // 🌟 CORS 프록시를 통한 요청 처리 추가
+       const proxiedUrl = getProxiedUrl(url);
+       
        // 원본 fetch 함수 호출 - 인증 과정 없이 바로 요청
-       return originalFetch(input, init);
+       return originalFetch(proxiedUrl, init);
      }
      
      // 회원탈퇴 요청 특별 처리 (DELETE /api/users)
@@ -236,9 +264,14 @@ const setupInterceptor = () => {
        }
      };
 
+     // 🌟 CORS 프록시 적용
+     const finalUrl = isProductionEnvironment() && url.includes('http://3.36.40.240:8001') 
+       ? getProxiedUrl(url) 
+       : url;
+
      // 최종 요청 전송
-     console.log('[FetchInterceptor] API 요청 전송:', url);
-     const response = await originalFetch(input, requestOptions);
+     console.log('[FetchInterceptor] API 요청 전송:', finalUrl);
+     const response = await originalFetch(finalUrl, requestOptions);
      console.log('[FetchInterceptor] API 응답 상태:', response.status);
 
      // 응답 오류 처리 (HTTP 상태 코드가 성공이 아닌 경우)
@@ -260,7 +293,7 @@ const setupInterceptor = () => {
            if (refreshedToken) {
              requestOptions.headers['Authorization'] = `Bearer ${refreshedToken}`;
              console.log('[FetchInterceptor] 토큰 갱신 후 요청 재시도');
-             return originalFetch(input, requestOptions);
+             return originalFetch(finalUrl, requestOptions);
            }
          }
        } catch (textError) {
@@ -275,6 +308,12 @@ const setupInterceptor = () => {
    } catch (error) {
      // 전역 에러 핸들링 - 모든 예외 상황 처리
      console.error('[Fetch Interceptor] 요청 중 오류:', error);
+     
+     // 🌟 CORS 오류 감지 및 친절한 메시지 표시
+     if (error instanceof TypeError && error.message === 'Failed to fetch') {
+       console.error('🚨 CORS 오류 또는 네트워크 연결 문제가 발생했습니다.');
+       toast.error('네트워크 연결을 확인해주세요. CORS 문제가 발생했을 수 있습니다.');
+     }
      
      // 에러 타입별 처리 - 사용자에게 적절한 메시지 표시
      if (error instanceof Error) {

@@ -14,12 +14,13 @@
 //    - 연결 실패 시 대체 전략 구현
 //    - 사용자에게 연결 상태 표시
 
-// src/components/chat/ChatRoom/hook.ts
-
-// 수정된 부분:
+// 🌟 새로 수정된 부분:
 // 1. connectWebSocket 함수에 배포 환경 확인 로직 추가
 // 2. 배포 환경에서는 WebSocket 연결 시도 없이 바로 폴링 방식 사용
-// 3. sendMessageViaREST 함수에 배포 환경 확인 및 API 엔드포인트 URL 수정
+// 3. sendMessageViaREST 함수에 API 엔드포인트 URL 수정
+// 4. CORS 이슈 해결을 위한 환경 감지 로직 추가
+// 5. HTTPS에서 HTTP 리소스 접근 차단 문제 해결을 위한 API 호출 방식 수정
+// 6. 채팅 UI에 연결 상태 확인용 폴백 UI 표시 조건 추가
 
 "use client";
 
@@ -39,6 +40,7 @@ export function useChatRoom() {
   const [detail, setDetail] = useState(false); // 상세 버튼 (숨김 상태)
   const [isWebSocketAvailable, setIsWebSocketAvailable] = useState(true); // WebSocket 가용성 상태
   const [isPolling, setIsPolling] = useState(false); // 폴링 상태
+  const [connectionFailed, setConnectionFailed] = useState(false); // 🌟 연결 완전 실패 상태 추가
   const inputRef = useRef<HTMLInputElement>(null); // 입력 필드 DOM에 접근하기 위한 ref
   const messagesEndRef = useRef<HTMLDivElement>(null); // 채팅 메시지 목록의 끝을 참조하는 ref
   const router = useRouter(); // useRouter 훅 사용
@@ -54,6 +56,7 @@ export function useChatRoom() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isFetched = useRef(false);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null); // 폴링 인터벌 참조
+  const connectionRetryCount = useRef(0); // 🌟 연결 재시도 카운트 추가
 
   // ✅ 게시물 데이터 상태
   const [postData, setPostData] = useState({
@@ -85,9 +88,10 @@ export function useChatRoom() {
     // 5초마다 새 메시지 확인
     const fetchMessages = async () => {
       try {
-        const response = await fetchData<Message[]>(
-          `/api/trade/${postId}/chat-rooms/${roomId}/messages`
-        );
+        // API 경로 설정
+        const apiUrl = `/api/trade/${postId}/chat-rooms/${roomId}/messages`;
+
+        const response = await fetchData<Message[]>(apiUrl);
 
         if (response.success && response.data) {
           const newMessages = response.data.reverse(); // ✅ 최신 메시지가 아래로 정렬
@@ -95,10 +99,22 @@ export function useChatRoom() {
           // 이전 메시지와 비교해 새 메시지만 추가
           if (newMessages.length > messages.length) {
             setMessages(newMessages);
+            setConnectionFailed(false); // 🌟 폴링 성공 시 연결 실패 상태 해제
+          }
+        } else {
+          connectionRetryCount.current += 1;
+          // 🌟 여러 번 재시도 후에도 실패하면 연결 실패 상태로 설정
+          if (connectionRetryCount.current > 3) {
+            setConnectionFailed(true);
           }
         }
       } catch (error) {
         console.error("❌ 메시지 폴링 실패:", error);
+        connectionRetryCount.current += 1;
+        // 🌟 여러 번 재시도 후에도 실패하면 연결 실패 상태로 설정
+        if (connectionRetryCount.current > 3) {
+          setConnectionFailed(true);
+        }
       }
     };
 
@@ -121,6 +137,7 @@ export function useChatRoom() {
         onConnect: () => {
           console.log("✅ SockJS+STOMP 연결 성공!");
           setIsWebSocketAvailable(true);
+          setConnectionFailed(false); // 🌟 연결 성공 시 연결 실패 상태 해제
 
           // 3️⃣ (메시지 수신 설정)
           stompClient.subscribe(`/topic/chat/${Number(roomId)}`, (message) => {
@@ -146,6 +163,11 @@ export function useChatRoom() {
           setIsWebSocketAvailable(false);
           // STOMP 연결 실패 시 폴링으로 대체
           startPolling();
+          connectionRetryCount.current += 1;
+          // 🌟 여러 번 재시도 후에도 실패하면 연결 실패 상태로 설정
+          if (connectionRetryCount.current > 3) {
+            setConnectionFailed(true);
+          }
         },
       });
 
@@ -163,18 +185,23 @@ export function useChatRoom() {
       setIsWebSocketAvailable(false);
       // SockJS 연결 실패 시 폴링으로 대체
       startPolling();
+      connectionRetryCount.current += 1;
+      // 🌟 여러 번 재시도 후에도 실패하면 연결 실패 상태로 설정
+      if (connectionRetryCount.current > 3) {
+        setConnectionFailed(true);
+      }
     }
   }, [roomId, startPolling]); // 의존성 추가
 
   // WebSocket 연결 시도 함수
   const connectWebSocket = useCallback(() => {
     try {
-      // 배포 환경인지 확인 (Vercel 또는 다른 프로덕션 환경)
+      // 🌟 배포 환경인지 확인 (Vercel 또는 다른 프로덕션 환경)
       const isProduction = 
         window.location.hostname === 'ko-chock-chock.vercel.app' || 
         window.location.protocol === 'https:';
       
-      // 배포 환경에서는 WebSocket 시도 없이 바로 폴링 방식 사용
+      // 🌟 배포 환경에서는 WebSocket 시도 없이 바로 폴링 방식 사용
       if (isProduction) {
         console.log("📌 배포 환경 감지: WebSocket 건너뛰고 폴링 방식으로 전환");
         setIsWebSocketAvailable(false);
@@ -209,6 +236,7 @@ export function useChatRoom() {
         socket.on("connect", () => {
           console.log("✅ Socket.io 연결 성공!");
           setIsWebSocketAvailable(true);
+          setConnectionFailed(false); // 🌟 연결 성공 시 연결 실패 상태 해제
           
           // 채팅방 구독
           socket.emit('join', { roomId: Number(roomId) });
@@ -242,6 +270,11 @@ export function useChatRoom() {
       setIsWebSocketAvailable(false);
       // WebSocket 연결 실패 시 폴링으로 대체
       startPolling();
+      connectionRetryCount.current += 1;
+      // 🌟 여러 번 재시도 후에도 실패하면 연결 실패 상태로 설정
+      if (connectionRetryCount.current > 3) {
+        setConnectionFailed(true);
+      }
     }
   }, [roomId, connectWithSockJS, startPolling]); // 모든 의존성 추가
 
@@ -267,15 +300,31 @@ export function useChatRoom() {
   // ✅ 이전 채팅 메시지 불러오기
   useEffect(() => {
     const fetchChatMessages = async () => {
-      // ✅ fetchData 호출 시 제네릭으로 `ChatMessage[]` 지정
-      const response = await fetchData<Message[]>(
-        `/api/trade/${postId}/chat-rooms/${roomId}/messages`
-      );
+      try {
+        // API 경로 설정
+        const apiUrl = `/api/trade/${postId}/chat-rooms/${roomId}/messages`;
 
-      if (response.success && response.data) {
-        setMessages(response.data.reverse()); // ✅ 최신 메시지가 아래로 정렬되도록 수정
-      } else {
-        console.error("❌ 채팅 내역 불러오기 실패:", response.message);
+        // ✅ fetchData 호출 시 제네릭으로 `ChatMessage[]` 지정
+        const response = await fetchData<Message[]>(apiUrl);
+
+        if (response.success && response.data) {
+          setMessages(response.data.reverse()); // ✅ 최신 메시지가 아래로 정렬되도록 수정
+          setConnectionFailed(false); // 🌟 초기 메시지 로드 성공 시 연결 실패 상태 해제
+        } else {
+          console.error("❌ 채팅 내역 불러오기 실패:", response.message);
+          connectionRetryCount.current += 1;
+          // 🌟 메시지 로드 실패 시 연결 실패 상태로 설정 (사용자에게 알림 표시 목적)
+          if (connectionRetryCount.current > 2) {
+            setConnectionFailed(true);
+          }
+        }
+      } catch (error) {
+        console.error("❌ 채팅 내역 불러오기 실패:", error);
+        connectionRetryCount.current += 1;
+        // 🌟 메시지 로드 실패 시 연결 실패 상태로 설정 (사용자에게 알림 표시 목적)
+        if (connectionRetryCount.current > 2) {
+          setConnectionFailed(true);
+        }
       }
     };
 
@@ -336,17 +385,10 @@ export function useChatRoom() {
         return;
       }
 
-      // 배포 환경인지 확인
-      const isProduction = 
-        window.location.hostname === 'ko-chock-chock.vercel.app' || 
-        window.location.protocol === 'https:';
-      
-      // API 요청 URL 설정 (배포 환경에서는 직접 백엔드 서버 URL 사용)
-      const apiBaseUrl = isProduction 
-        ? 'http://3.36.40.240:8001' 
-        : '';
+      // API 요청 URL 설정
+      const apiUrl = `/api/trade/${postId}/chat-rooms/${roomId}/messages`;
 
-      const response = await fetch(`${apiBaseUrl}/api/trade/${postId}/chat-rooms/${roomId}/messages`, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -363,23 +405,41 @@ export function useChatRoom() {
       
       // 메시지 전송 후 즉시 최신 메시지 목록 요청
       fetchLatestMessages();
+      setConnectionFailed(false); // 🌟 메시지 전송 성공 시 연결 실패 상태 해제
     } catch (error) {
       console.error("❌ REST API 메시지 전송 실패:", error);
+      connectionRetryCount.current += 1;
+      
+      // 🌟 여러 번 재시도 후에도 실패하면 연결 실패 상태로 설정
+      if (connectionRetryCount.current > 3) {
+        setConnectionFailed(true);
+      }
     }
   };
 
   // 최신 메시지 목록 가져오기
   const fetchLatestMessages = async () => {
     try {
-      const response = await fetchData<Message[]>(
-        `/api/trade/${postId}/chat-rooms/${roomId}/messages`
-      );
+      // API 요청 URL 설정
+      const apiUrl = `/api/trade/${postId}/chat-rooms/${roomId}/messages`;
+      
+      const response = await fetchData<Message[]>(apiUrl);
 
       if (response.success && response.data) {
         setMessages(response.data.reverse());
+        setConnectionFailed(false); // 🌟 메시지 로드 성공 시 연결 실패 상태 해제
+      } else {
+        connectionRetryCount.current += 1;
+        if (connectionRetryCount.current > 3) {
+          setConnectionFailed(true);
+        }
       }
     } catch (error) {
       console.error("❌ 최신 메시지 가져오기 실패:", error);
+      connectionRetryCount.current += 1;
+      if (connectionRetryCount.current > 3) {
+        setConnectionFailed(true);
+      }
     }
   };
 
@@ -605,6 +665,19 @@ export function useChatRoom() {
     router.push(`/jobList/${postId}/${roomId}/map`);
   };
 
+  // 🌟 연결 재시도 함수 추가
+  const retryConnection = () => {
+    console.log("🔄 연결 재시도 중...");
+    setConnectionFailed(false);
+    connectionRetryCount.current = 0;
+    
+    // WebSocket 연결 재시도
+    connectWebSocket();
+    
+    // 메시지 다시 불러오기
+    fetchLatestMessages();
+  };
+
   return {
     sendMessage,
     onClickApprove,
@@ -623,5 +696,7 @@ export function useChatRoom() {
     messagesEndRef,
     isWebSocketAvailable,
     isPolling,
+    connectionFailed, // 🌟 연결 실패 상태 반환 추가
+    retryConnection,  // 🌟 연결 재시도 함수 반환 추가
   };
 }
