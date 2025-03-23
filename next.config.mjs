@@ -19,12 +19,37 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "http://3.36.40.240:8001/api/:path*", // HTTPS에서 HTTP로 변경
+        destination: "http://3.36.40.240:8001/api/:path*",
+        basePath: false
       },
       {
         source: "/ws",
-        destination: "http://3.36.40.240:8001/ws", // HTTPS에서 HTTP로 변경
+        destination: "http://3.36.40.240:8001/ws",
+        basePath: false
       },
+      {
+        source: "/ws/:path*",
+        destination: "http://3.36.40.240:8001/ws/:path*",
+        basePath: false
+      },
+      {
+        source: "/socket.io/:path*",
+        destination: "http://3.36.40.240:8001/socket.io/:path*",
+        basePath: false
+      }
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "upgrade-insecure-requests"
+          }
+        ]
+      }
     ];
   },
   webpack: (config) => {
