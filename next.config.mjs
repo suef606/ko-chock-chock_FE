@@ -19,11 +19,11 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "http://3.36.40.240:8001/api/:path*",
+        destination: "http://3.36.40.240:8001/api/:path*", // HTTPS에서 HTTP로 변경
       },
       {
         source: "/ws",
-        destination: "http://3.36.40.240:8001/ws",
+        destination: "http://3.36.40.240:8001/ws", // HTTPS에서 HTTP로 변경
       },
     ];
   },

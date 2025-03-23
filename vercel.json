@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/ws",
-      "destination": "http://3.36.40.240:8001/ws"
+      "destination": "http://3.36.40.240:8001/ws" 
     }
   ]
 }
