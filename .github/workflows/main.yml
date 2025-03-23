@@ -7,28 +7,33 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: pandoc/latex
     steps:
       - uses: actions/checkout@v2
 
-      - name: Install mustache (to update the date)
-        run: apk add ruby && gem install mustache
+      # Node.js 설정 (Next.js 프로젝트인 경우)
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '20'
+          
+      # 의존성 설치
+      - name: Install dependencies
+        run: yarn install
+        
+      # (선택적) 빌드 단계
+      - name: Build
+        run: yarn build
 
-      - name: creates output
-        run: sh ./build.sh
-
-      - name: Pushes to another repository
+      # 다른 저장소로 푸시
+      - name: Push to another repository
         id: push_directory
         uses: cpina/github-action-push-to-another-repository@main
         env:
           API_TOKEN_GITHUB: ${{ secrets.AUTO_ACTIONS }}
         with:
           source-directory: '.'
-          destination-github-username: 630yjl
-          destination-repository-name: kochokchok
+          destination-github-username: suef606
+          destination-repository-name: ko-chock-chock_FE
           user-email: ${{ secrets.EMAIL }}
           commit-message: ${{ github.event.commits[0].message }}
-          target-branch: develop
-
-      - name: Test get variable exported by push-to-another-repository
-        run: echo $DESTINATION_CLONED_DIRECTORY
+          target-branch: 박정수
