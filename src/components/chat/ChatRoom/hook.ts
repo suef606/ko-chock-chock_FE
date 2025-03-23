@@ -14,6 +14,13 @@
 //    - 연결 실패 시 대체 전략 구현
 //    - 사용자에게 연결 상태 표시
 
+// src/components/chat/ChatRoom/hook.ts
+
+// 수정된 부분:
+// 1. connectWebSocket 함수에 배포 환경 확인 로직 추가
+// 2. 배포 환경에서는 WebSocket 연결 시도 없이 바로 폴링 방식 사용
+// 3. sendMessageViaREST 함수에 배포 환경 확인 및 API 엔드포인트 URL 수정
+
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
@@ -23,7 +30,7 @@ import { useUserStore } from "@/commons/store/userStore";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import { fetchData } from "@/components/chat/ChatRoom/utils/fetchAPI";
-import { Socket, io } from "socket.io-client"; // Socket 타입 추가 import
+import { Socket, io } from 'socket.io-client'; // Socket 타입 추가 import
 
 export function useChatRoom() {
   const { boardId, chatId } = useParams();
@@ -84,7 +91,7 @@ export function useChatRoom() {
 
         if (response.success && response.data) {
           const newMessages = response.data.reverse(); // ✅ 최신 메시지가 아래로 정렬
-
+          
           // 이전 메시지와 비교해 새 메시지만 추가
           if (newMessages.length > messages.length) {
             setMessages(newMessages);
@@ -104,11 +111,9 @@ export function useChatRoom() {
   // SockJS와 STOMP를 사용한 연결 (기존 방식) - 폴백 옵션
   const connectWithSockJS = useCallback(() => {
     try {
-      const socketUrl = `${
-        window.location.protocol === "https:" ? "https" : "http"
-      }://3.36.40.240:8001/ws`;
+      const socketUrl = `${window.location.protocol === "https:" ? "https" : "http"}://3.36.40.240:8001/ws`;
       console.log("🌐 SockJS 연결 시도:", socketUrl);
-
+      
       const socket = new SockJS(socketUrl);
       const stompClient = new Client({
         webSocketFactory: () => socket,
@@ -120,7 +125,7 @@ export function useChatRoom() {
           // 3️⃣ (메시지 수신 설정)
           stompClient.subscribe(`/topic/chat/${Number(roomId)}`, (message) => {
             try {
-              console.log("📩 메시지 수신됨:", message.body);
+              console.log("📩 메시지 수신됨:", message.body); 
               const receivedMessage = JSON.parse(message.body);
               console.log("✅ 파싱된 메시지:", receivedMessage);
 
@@ -164,56 +169,69 @@ export function useChatRoom() {
   // WebSocket 연결 시도 함수
   const connectWebSocket = useCallback(() => {
     try {
+      // 배포 환경인지 확인 (Vercel 또는 다른 프로덕션 환경)
+      const isProduction = 
+        window.location.hostname === 'ko-chock-chock.vercel.app' || 
+        window.location.protocol === 'https:';
+      
+      // 배포 환경에서는 WebSocket 시도 없이 바로 폴링 방식 사용
+      if (isProduction) {
+        console.log("📌 배포 환경 감지: WebSocket 건너뛰고 폴링 방식으로 전환");
+        setIsWebSocketAvailable(false);
+        startPolling();
+        return;
+      }
+      
       // 기존 연결 해제
       if (stompClientRef.current) {
         stompClientRef.current.deactivate();
       }
-
+      
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
 
-      // 현재 환경에 맞는 프로토콜 설정
-      const httpProtocol =
-        window.location.protocol === "https:" ? "https" : "http";
-
+      // 현재 환경에 맞는 프로토콜 설정 
+      const httpProtocol = window.location.protocol === "https:" ? "https" : "http";
+      
       // 먼저 Socket.io 연결 시도
       try {
         const socketUrl = `${httpProtocol}://3.36.40.240:8001`;
         console.log("🌐 Socket.io 연결 시도:", socketUrl);
-
+        
         const socket = io(socketUrl, {
-          path: "/ws",
+          path: '/ws',
           transports: ["websocket", "polling"],
           reconnection: true,
-          reconnectionAttempts: 3,
+          reconnectionAttempts: 3
         });
-
+        
         socket.on("connect", () => {
           console.log("✅ Socket.io 연결 성공!");
           setIsWebSocketAvailable(true);
-
+          
           // 채팅방 구독
-          socket.emit("join", { roomId: Number(roomId) });
-
+          socket.emit('join', { roomId: Number(roomId) });
+          
           // 메시지 수신 핸들러
-          socket.on("message", (data) => {
+          socket.on('message', (data) => {
             try {
               console.log("📩 Socket.io 메시지 수신:", data);
-              setMessages((prev) => [...prev, data]);
+              setMessages(prev => [...prev, data]);
             } catch (error) {
               console.error("🚨 메시지 처리 오류:", error);
             }
           });
         });
-
+        
         socket.on("connect_error", (error) => {
           console.error("❌ Socket.io 연결 실패:", error);
           // Socket.io 실패 시 SockJS+STOMP 시도
           connectWithSockJS();
         });
-
+        
         socketRef.current = socket;
+        
       } catch (socketError) {
         console.error("❌ Socket.io 초기화 실패:", socketError);
         // Socket.io 실패 시 SockJS+STOMP 시도
@@ -318,24 +336,31 @@ export function useChatRoom() {
         return;
       }
 
-      const response = await fetch(
-        `/api/trade/${postId}/chat-rooms/${roomId}/messages`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(message),
-        }
-      );
+      // 배포 환경인지 확인
+      const isProduction = 
+        window.location.hostname === 'ko-chock-chock.vercel.app' || 
+        window.location.protocol === 'https:';
+      
+      // API 요청 URL 설정 (배포 환경에서는 직접 백엔드 서버 URL 사용)
+      const apiBaseUrl = isProduction 
+        ? 'http://3.36.40.240:8001' 
+        : '';
+
+      const response = await fetch(`${apiBaseUrl}/api/trade/${postId}/chat-rooms/${roomId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(message)
+      });
 
       if (!response.ok) {
         throw new Error("메시지 전송 실패");
       }
 
       console.log("✅ REST API로 메시지 전송 성공!");
-
+      
       // 메시지 전송 후 즉시 최신 메시지 목록 요청
       fetchLatestMessages();
     } catch (error) {
@@ -377,9 +402,9 @@ export function useChatRoom() {
     if (isWebSocketAvailable) {
       // Socket.io 연결을 우선 사용
       if (socketRef.current && socketRef.current.connected) {
-        socketRef.current.emit("message", chatMessage);
+        socketRef.current.emit('message', chatMessage);
         console.log("✅ Socket.io로 메시지 전송 성공!");
-      }
+      } 
       // 폴백: STOMP 클라이언트 사용
       else if (stompClientRef.current && stompClientRef.current.connected) {
         stompClientRef.current.publish({
@@ -391,7 +416,7 @@ export function useChatRoom() {
         console.error("🚨 WebSocket 연결 안됨! 메시지 전송 실패");
         // 연결 재시도
         connectWebSocket();
-
+        
         // 실패 시 REST API로 전송 (대체 방법)
         sendMessageViaREST(chatMessage);
       }
@@ -405,8 +430,8 @@ export function useChatRoom() {
       ...chatMessage,
       createdAt: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, localMessage]);
-
+    setMessages(prev => [...prev, localMessage]);
+    
     setInputValue("");
     inputRef.current?.focus();
   };
@@ -425,9 +450,9 @@ export function useChatRoom() {
     if (isWebSocketAvailable) {
       // Socket.io 연결을 우선 사용
       if (socketRef.current && socketRef.current.connected) {
-        socketRef.current.emit("message", walkMessage);
+        socketRef.current.emit('message', walkMessage);
         console.log("✅ Socket.io로 메시지 전송 성공!");
-      }
+      } 
       // 폴백: STOMP 클라이언트 사용
       else if (stompClientRef.current && stompClientRef.current.connected) {
         stompClientRef.current.publish({
@@ -446,7 +471,7 @@ export function useChatRoom() {
     }
 
     // 지역 UI 업데이트를 위한 메시지 추가
-    setMessages((prev) => [...prev, walkMessage]);
+    setMessages(prev => [...prev, walkMessage]);
   };
 
   // 이미지 전송하는 경우
@@ -531,9 +556,9 @@ export function useChatRoom() {
         if (isWebSocketAvailable) {
           // Socket.io 연결을 우선 사용
           if (socketRef.current && socketRef.current.connected) {
-            socketRef.current.emit("message", imageMessage);
+            socketRef.current.emit('message', imageMessage);
             console.log("✅ Socket.io로 이미지 메시지 전송 성공!");
-          }
+          } 
           // 폴백: STOMP 클라이언트 사용
           else if (stompClientRef.current && stompClientRef.current.connected) {
             stompClientRef.current.publish({
@@ -552,7 +577,7 @@ export function useChatRoom() {
         }
 
         // 지역 UI 업데이트를 위한 메시지 추가
-        setMessages((prev) => [...prev, imageMessage]);
+        setMessages(prev => [...prev, imageMessage]);
       }
     } catch (error) {
       console.error("🚨 이미지 업로드 실패:", error);

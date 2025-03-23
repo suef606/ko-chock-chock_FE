@@ -3,12 +3,26 @@
 //    - 이전: const baseUrl = `${httpProtocol}://3.36.40.240:8001${url}`;
 //    - 변경: 상대 경로 사용 (URL 그대로 사용)
 // 2. 이유: 프록시 리다이렉트를 활용하여 next.config.mjs와 vercel.json에서 정의한 리다이렉트 규칙이 적용되도록 합니다.
+// 3. 추가: 배포 환경 감지 및 API 경로 설정 로직 추가
+//    - Vercel 배포 환경에서는 직접 백엔드 서버 URL 사용
 
 const getAccessToken = (): string | null => {
   const tokenStorageStr = localStorage.getItem("token-storage");
   if (!tokenStorageStr) return null;
   const tokenData = JSON.parse(tokenStorageStr);
   return tokenData?.accessToken || null;
+};
+
+// 배포 환경 확인 함수
+const isProductionEnvironment = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return window.location.hostname === 'ko-chock-chock.vercel.app' || window.location.protocol === 'https:';
+};
+
+// API 기본 URL 가져오기
+const getApiBaseUrl = (): string => {
+  // 배포 환경에서는 직접 백엔드 URL 사용, 개발 환경에서는 상대 경로 사용
+  return isProductionEnvironment() ? 'http://3.36.40.240:8001' : '';
 };
 
 // ✅ 공통 Fetch API 함수 (제네릭 활용)
@@ -23,8 +37,13 @@ export const fetchAPI = async <T>(
   }
 
   try {
-    // 하드코딩된 URL 대신 상대 경로 사용
-    const response = await fetch(url, {
+    // 환경에 따라 기본 URL 설정
+    const baseUrl = getApiBaseUrl();
+    const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+    
+    console.log(`🌐 API 요청: ${method} ${fullUrl}`);
+    
+    const response = await fetch(fullUrl, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
